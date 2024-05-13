@@ -56,8 +56,6 @@ def count_relu(m, x, y):
     m.total_ops += torch.Tensor([int(total_ops)])
     print("ReLU: F_in={} P={}, params={}, operations={}".format(x.size(1),x.size()[2:].numel(),0,int(total_ops)))
 
-
-
 def count_avgpool(m, x, y):
     x = x[0]
     total_add = torch.prod(torch.Tensor([m.kernel_size])) - 1
@@ -145,3 +143,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# calculate score for a model
