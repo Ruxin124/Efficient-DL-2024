@@ -48,12 +48,12 @@ Course organisation / Syllabus
         - globale_pruned_0.3.pth — Test Accuracy: 52.21%
     - Globale pruning 0.5
         - globale_pruned_0.5.pth — Test Accuracy:
-        - 
+          
 - Retrain after first global pruning
     - retrain globale_pruned_0.2.pth on the training set for 10 epochs
         - globale_pruned_0.2_retrained_10epochs.pth — Test Accuracy:  90.57%
         - globale_pruned_0.2_retrained_50epochs.pth — Test Accuracy:  90.79%
-        - 
+          
 - [Pruning Filters for Efficient ConvNets](https://arxiv.org/abs/1608.08710) : gradually prune and retrain across layers
 
 ### Model score 
