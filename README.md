@@ -40,10 +40,6 @@ Course organisation / Syllabus
 
 ### Session 3
 
-
-
-### Session 3
-
 - Global Pruning, no retrain
     - Globale pruning 0.2
         - test_lab4_global_pruning.ipynb
