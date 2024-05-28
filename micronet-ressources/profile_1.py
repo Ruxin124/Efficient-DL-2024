@@ -11,8 +11,8 @@ device = 'cpu'
 
 our_quant=1 # binary quantization
 quant_factors={1:32,8:4,16:2,32:1} # quantization factors for different quantization levels
-quant_factor= quant_factors[our_quant]
-sparsity=0.
+quant_factor= quant_factors[our_quant] # quantization factor for binary quantization 32
+sparsity=0.2
 
 
 def count_conv2d(m, x, y):
@@ -27,7 +27,6 @@ def count_conv2d(m, x, y):
     kernel_add = sh * sw * fin - 1
     bias_ops = 1 if m.bias is not None else 0
     kernel_mul = kernel_mul/quant_factor
-    kernel_add = sh * sw * fin - 1/quant_factor
     ops = (kernel_mul + kernel_add)/m.groups + bias_ops
 
     # total ops
@@ -99,7 +98,7 @@ def profile(model, input_size, custom_ops = {}):
 
         for p in m.parameters():
             # m.total_params += torch.Tensor([p.numel()]) / quant_factor # Score changes with quantification
-            non_zero_params = torch.sum(p != 0).item()
+            non_zero_params = torch.count_nonzero(p)
             m.total_params += non_zero_params / quant_factor
 
         if isinstance(m, nn.Conv2d):
