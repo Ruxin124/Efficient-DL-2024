@@ -7,6 +7,8 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 import torch.nn as nn
 from models_cifar100.resnet import ResNet18
 from torchvision.models import densenet161
+from torch.optim import Adam, lr_scheduler
+from torch.nn import functional as F
 
 
 # Load the CIFAR-10 dataset
@@ -41,130 +43,61 @@ else:
     print("CUDA is not available. Using CPU.")
     device = torch.device("cpu")
 
-# Hyperparameters
-hparam_currentvalue = {
-    'epochs': 100,
-    'initial_lr': 0.001,
-}
-
 # Build model
 model = densenet161().to(device)
 
-# Define optimizer and loss function
-optimizer = optim.SGD(model.parameters(), lr=hparam_currentvalue['initial_lr'], momentum=0.9, weight_decay=5e-4)
-criterion = nn.CrossEntropyLoss()
+# Adjust the final classifier layer for 10 classes instead of 100
+model.classifier = nn.Linear(model.classifier.in_features, 10)
+model.to(device)
 
-# Learning rate scheduler
+# Training configuration
+optimizer = Adam(model.parameters(), lr=0.001)
 scheduler = CosineAnnealingLR(optimizer, T_max=100, eta_min=0.001, last_epoch=-1)
-# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=hparam_currentvalue['lr_decay_epoch'], gamma=hparam_currentvalue['lr_decay_factor'])
-# Training
-model.train()
-epoch_train_losses = []
-epoch_test_losses = []
-epoch_train_accuracies = []
-epoch_test_accuracies = []
-# Initialize best test accuracy and best model state
+
+num_epochs = 100
 best_test_accuracy = 0.0
 best_model_state = None
 
-# Training loop
-for epoch in range(hparam_currentvalue['epochs']):
-    training_loss = 0.0
-    correct = 0
-    total = 0
-    
-    for i, data in enumerate(trainloader, 0):
-        inputs, labels = data
-        inputs, labels = inputs.to(device), labels.to(device)
-
+# Training and evaluation loop
+for epoch in range(num_epochs):
+    model.train()
+    train_loss, correct, total = 0, 0, 0
+    for data, targets in trainloader:
+        data, targets = data.to(device), targets.to(device)
         optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
+        outputs = model(data)
+        loss = F.cross_entropy(outputs, targets)
         loss.backward()
         optimizer.step()
-        training_loss += loss.item()
-        
+
+        train_loss += loss.item()
         _, predicted = torch.max(outputs.data, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
-     
-    # Calculate and print statistics for the epoch
-    epoch_train_loss = training_loss / len(trainloader)
-    epoch_accuracy_train = 100 * correct / total
-    print(f'Epoch: {epoch}, Train Loss: {epoch_train_loss:.4f}, Train Accuracy: {epoch_accuracy_train:.2f}%')
-    
-    # Append loss and accuracy for visualization later
-    epoch_train_losses.append(epoch_train_loss)
-    epoch_train_accuracies.append(epoch_accuracy_train)
+        total += targets.size(0)
+        correct += (predicted == targets).sum().item()
+    train_accuracy = 100 * correct / total
+    print(f'Epoch {epoch}: Train Loss: {train_loss / len(trainloader)}, Accuracy: {train_accuracy:.2f}%')
 
-    # test loss Evaluate on test set 
-    model.eval()  # Set model to evaluation mode
-    # model.half()  # Convert model to half precision
-    test_loss = 0.0
-    test_accuracy = 0.0
-
+    # Evaluate on test set
+    model.eval()
+    test_correct, test_total = 0, 0
     with torch.no_grad():
-        for data in testloader:
-            images, labels = data
-            # images, labels = images.to(device).half(), labels.to(device)
-            images, labels = images.to(device), labels.to(device)
-
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            test_loss += loss.item()
+        for data, targets in testloader:
+            data, targets = data.to(device), targets.to(device)
+            outputs = model(data)
             _, predicted = torch.max(outputs.data, 1)
-            test_accuracy += (predicted == labels).sum().item()
+            test_total += targets.size(0)
+            test_correct += (predicted == targets).sum().item()
+    test_accuracy = 100 * test_correct / test_total
+    print(f'Test Accuracy: {test_accuracy:.2f}%')
 
-    epoch_test_loss = test_loss / len(testloader)
-    epoch_test_losses.append(epoch_test_loss)
-    epoch_accuracy_test = 100 * test_accuracy / len(c10test)
-    epoch_test_accuracies.append(epoch_accuracy_test)
-    print(f'Epoch {epoch}: Test Loss: {epoch_test_loss:.4f}, Test Accuracy: {epoch_accuracy_test:.2f}%')
-
-    # Step the scheduler
-    scheduler.step()
-    
-    # select the best model
-    if epoch_accuracy_test > best_test_accuracy:
-        best_test_accuracy = epoch_accuracy_test  
+    # Save the best model based on test accuracy
+    if test_accuracy > best_test_accuracy:
+        best_test_accuracy = test_accuracy
         best_model_state = model.state_dict()
-        print(f'Best model found at epoch {epoch} with test accuracy {best_test_accuracy:.2f}%')
-    else:
-        print("Current test accuracy: ", epoch_accuracy_test)
-        print("Best test accuracy so far: ", best_test_accuracy)
-    print('')
-print('Finished Training')
-
-# best modle test on test set
-model.eval() 
-
-test_correct = 0
-test_total = 0
-with torch.no_grad():
-    for data in testloader:
-        images, labels = data
-        images, labels = images.to(device), labels.to(device) # Convert images to half precision
-        outputs = model(images)
-        _, predicted = torch.max(outputs.data, 1)
-        test_total += labels.size(0)
-        test_correct += (predicted == labels).sum().item()
-
-test_accuracy = 100 * test_correct / test_total
-print(f'Final Test Accuracy: {test_accuracy:.2f}%')
-
-# Save model along with accuracy and loss history
-# Save the best model
-if best_model_state:
-    torch.save({
-        'net': best_model_state,
-        'best_test_accuracy': best_test_accuracy,
-        'hyperparam': hparam_currentvalue,
-        'epoch_train_losses': epoch_train_losses,
-        'epoch_test_losses': epoch_test_losses,
-        'epoch_accuracies_train': epoch_train_accuracies,
-        'epoch_accuracies_test': epoch_test_accuracies,
-        'final_test_accuracy': test_accuracy 
-        
-    }, 'Session1_lab2_Resnet18_cifar10.pth')
-    print("Best model saved.")
-
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': best_model_state,
+            'optimizer_state_dict': optimizer.state_dict(),
+            'test_accuracy': best_test_accuracy
+        }, 'best_model_trained_densnet.pth')
+    scheduler.step()
